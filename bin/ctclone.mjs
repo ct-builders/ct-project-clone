@@ -19,6 +19,7 @@ import { inventory, renderInventory } from '../src/inventoryCmd.mjs';
 import { smoke, renderSmoke } from '../src/smoke.mjs';
 import { wipe } from '../src/wipe.mjs';
 import { IN_ORDER } from '../src/resources.mjs';
+import { resolveSelection } from '../src/selection.mjs';
 import { BULK_THRESHOLD } from '../src/importApi.mjs';
 
 const USAGE = `
@@ -41,6 +42,10 @@ COMMANDS
 
 OPTIONS
   --only a,b,c                  Limit to these resources.
+  --exclude a,b,c               Every resource except these. Not with --only.
+  --config <path>               Selection file (default: ctclone.config.json
+                                in the repo root, if it exists). A flag above
+                                replaces whatever the file says.
   --dry-run                     keyfix only: report what it would key.
   --customer-password <pw>      Password set on every cloned customer
                                 (default: 123). Source passwords are hashed
@@ -87,6 +92,16 @@ function numeric(v, fallback) {
   return n;
 }
 
+/**
+ * Narrow a resource selection to the handful of resources that can take a
+ * derived key. A selection is usually much broader than that — a config file
+ * excluding one resource names twenty-five — and passing it through whole
+ * would warn once per resource that was never keyable in the first place.
+ */
+function keyfixSelection(only) {
+  return only ? only.filter((n) => KEY_STRATEGIES[n]) : DEFAULT_KEYFIX;
+}
+
 async function confirm(question) {
   process.stdout.write(`${question} `);
   return new Promise((resolve) => {
@@ -105,7 +120,18 @@ async function main() {
   }
   if (flags.verbose) log.setLevel('debug');
 
-  const only = list(flags.only);
+  const selection = resolveSelection({
+    only: list(flags.only),
+    exclude: list(flags.exclude),
+    configPath: typeof flags.config === 'string' ? flags.config : null,
+  });
+  const only = selection.names;
+  if (only) {
+    const where =
+      selection.from === 'flag' ? 'command line' : path.relative(ROOT, selection.from) || selection.from;
+    log.info(`Resources (${only.length}, from ${where}): ${only.join(', ')}`);
+  }
+
   const options = {
     customerPassword: typeof flags['customer-password'] === 'string' ? flags['customer-password'] : '123',
     pruneProjectSettings: !!flags['prune-project-settings'],
@@ -127,11 +153,15 @@ async function main() {
     }
 
     case 'keyfix': {
+      const names = keyfixSelection(only);
+      if (!names.length) {
+        throw new ConfigError(
+          `None of the selected resources can take a derived key.\n` +
+            `  keyfix covers: ${Object.keys(KEY_STRATEGIES).join(', ')}`
+        );
+      }
       const s = newSource();
-      const summary = await keyfix(s, {
-        only: only || DEFAULT_KEYFIX,
-        dryRun: !!flags['dry-run'],
-      });
+      const summary = await keyfix(s, { only: names, dryRun: !!flags['dry-run'] });
       process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
       break;
     }
@@ -166,7 +196,9 @@ async function main() {
         }
       }
 
-      const keySummary = await keyfix(s, { only: only ? only.filter((n) => KEY_STRATEGIES[n]) : DEFAULT_KEYFIX });
+      const keyNames = keyfixSelection(only);
+      if (!keyNames.length) log.skip('keyfix: nothing in this selection takes a derived key');
+      const keySummary = keyNames.length ? await keyfix(s, { only: keyNames }) : {};
       const exportReport = await exportProject(s, { only, options });
       const ctx = await importProject(t, { sourceKey: s.projectKey, only, options });
       const result = await verify(s, t);

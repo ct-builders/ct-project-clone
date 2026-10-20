@@ -1,0 +1,11 @@
+{
+  "_comment": [
+    "Copy to ctclone.config.json to set which resources every command covers.",
+    "Use \"exclude\" or \"include\", never both. --only and --exclude on the",
+    "command line replace whatever this file says.",
+    "Run `node bin/ctclone.mjs --help` for the full resource list."
+  ],
+  "resources": {
+    "exclude": ["orders", "payments", "reviews"]
+  }
+}

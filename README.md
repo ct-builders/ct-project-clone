@@ -76,12 +76,59 @@ it.
 | `smoke` | Drive the target for real: log a cloned customer in, resolve a product's references, add to cart, run a search. |
 | `wipe --confirm <projectKey>` | Delete everything cloneable from the target. |
 
-Options: `--only a,b,c` to limit resources, `--customer-password <pw>` (default
+Options: `--only a,b,c` and `--exclude a,b,c` to choose resources (see
+[Choosing what to copy](#choosing-what-to-copy)), `--config <path>` for a
+selection file, `--customer-password <pw>` (default
 `123`), `--prune-project-settings` to make the target's languages, countries and
 currencies match the source exactly rather than adding to them,
 `--clone-project-name`, `--bulk-threshold <n>` (default `5000`) for the size at
 which a resource switches to the Import API, `--yes` to skip the clone
 confirmation, `--verbose`.
+
+## Choosing what to copy
+
+Every command runs over the whole resource list by default. To narrow it, name
+the resources you want with `--only`, or the ones you do not with `--exclude`:
+
+```bash
+node bin/ctclone.mjs clone --exclude orders,payments
+node bin/ctclone.mjs export --only products,categories
+```
+
+A selection that outlives one command goes in `ctclone.config.json` in the repo
+root, which every command reads:
+
+```json
+{
+  "resources": {
+    "exclude": ["orders", "payments", "reviews"]
+  }
+}
+```
+
+Use `include` or `exclude`, not both. `--config <path>` reads the file from
+somewhere else, and a flag on the command line replaces the file for that run
+rather than merging with it — so the file holds the selection you normally want
+and a flag handles the exception.
+
+This matters most because a clone is several commands. `export` and `import`
+each take their own selection, and the file is what keeps them in step; two
+mismatched `--only` lists produce a target holding drafts nobody imported.
+Whatever a run resolves to is printed before it starts.
+
+The copy is `ctclone.config.json`, which is gitignored;
+`ctclone.config.example.json` is the committed template.
+
+**A name that is not a resource stops the run**, naming the typo and suggesting
+the resource you meant — a selection that matches nothing would otherwise copy
+nothing and report success. The valid names are listed by
+`node bin/ctclone.mjs --help`, and `_project` is one of them — the target's
+languages, countries and currencies, which every other write depends on. It is
+part of `--exclude`'s "everything else", and is **not** pulled in by an `--only`
+that does not name it.
+
+Naming a resource the tool never clones — `carts`, `quotes`, `extensions` — is
+allowed and does nothing but say so.
 
 ## Checking the result
 
@@ -166,6 +213,12 @@ node bin/ctclone.mjs wipe --confirm <target-project-key>
 Deletion runs in reverse dependency order and repeats until a pass removes
 nothing new, because a category with children and a product still in a
 selection both refuse the first attempt.
+
+`wipe` takes the same selection as everything else, so a `ctclone.config.json`
+that excludes a resource leaves that resource in the target — symmetric with
+the clone it is undoing, and the reason the resolved list is printed before the
+command runs. `--only` or `--exclude` on the command line overrides it, and
+`--confirm` still has to match the target's project key exactly.
 
 ## Tests
 
