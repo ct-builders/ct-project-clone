@@ -1,0 +1,22 @@
+{
+  "name": "ct-project-clone",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Clone data and settings between two commercetools projects.",
+  "license": "MIT",
+  "bin": {
+    "ctclone": "./bin/ctclone.mjs"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.mjs'",
+    "inventory": "node bin/ctclone.mjs inventory",
+    "keyfix": "node bin/ctclone.mjs keyfix",
+    "export": "node bin/ctclone.mjs export",
+    "import": "node bin/ctclone.mjs import",
+    "clone": "node bin/ctclone.mjs clone",
+    "verify": "node bin/ctclone.mjs verify",
+    "wipe": "node bin/ctclone.mjs wipe"
+  },
+  "engines": { "node": ">=20" }
+}
